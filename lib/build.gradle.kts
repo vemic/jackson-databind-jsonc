@@ -133,12 +133,12 @@ tasks {
     }
 }
 
-// Check for publishing credentials
-val ossrhUsername = project.findProperty("ossrhUsername") as String? ?: System.getenv("OSSRH_USERNAME")
-val ossrhPassword = project.findProperty("ossrhPassword") as String? ?: System.getenv("OSSRH_PASSWORD")
-val hasOssrhCredentials = !ossrhUsername.isNullOrEmpty() && !ossrhPassword.isNullOrEmpty()
+// Publishing configuration for Maven Central Portal
+// Note: OSSRH publishing removed due to sunset (June 30, 2025)
+// Artifacts are now published via GitHub Releases for manual Central Portal upload
 
 // GPG Signing Configuration
+// Note: For Maven Central Portal, artifacts can be signed locally or uploaded unsigned
 signing {
     val signingKey = System.getenv("GPG_PRIVATE_KEY")
     val signingPassword = System.getenv("GPG_PASSPHRASE")
@@ -148,7 +148,8 @@ signing {
         useInMemoryPgpKeys(signingKey, signingPassword)
         sign(publishing.publications)
     } else {
-        println("GPG signing credentials not found, artifacts will not be signed")
+        println("GPG signing credentials not found - artifacts will be unsigned")
+        println("For Maven Central Portal: signing can be done during upload or locally")
     }
 }
 

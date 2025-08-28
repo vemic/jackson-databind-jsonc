@@ -1,41 +1,75 @@
+import java.time.Duration
+
 plugins {
-    id("io.github.gradle-nexus.publish-plugin") version "1.3.0"
+    id("io.github.gradle-nexus.publish-plugin") version "2.0.0"
 }
 
-// Check for publishing credentials
-val ossrhUsername = project.findProperty("ossrhUsername") as String? ?: System.getenv("OSSRH_USERNAME")
-val ossrhPassword = project.findProperty("ossrhPassword") as String? ?: System.getenv("OSSRH_PASSWORD")
-val hasCredentials = !ossrhUsername.isNullOrEmpty() && !ossrhPassword.isNullOrEmpty()
+// Maven Central Portal Configuration
+// ================================
+// This project uses Maven Central Portal for publishing.
+// 
+// Required environment variables for automated publishing:
+// - CENTRAL_PORTAL_USERNAME: Central Portal username 
+// - CENTRAL_PORTAL_PASSWORD: Central Portal password/token
+// 
+// Setup guide: https://central.sonatype.org/publish/generate-portal-token/
 
-if (hasCredentials) {
-    println("OSSRH credentials found, configuring Sonatype publishing")
-} else {
-    println("OSSRH credentials not found, skipping Sonatype configuration")
-    println("To publish to Maven Central, set OSSRH_USERNAME and OSSRH_PASSWORD environment variables")
+nexusPublishing {
+    repositories {
+        sonatype {
+            // Central Portal configuration via nexus-publish-plugin
+            nexusUrl.set(uri("https://central.sonatype.com/api/v1/publisher/"))
+            snapshotRepositoryUrl.set(uri("https://central.sonatype.com/api/v1/publisher/"))
+            
+            username.set(System.getenv("CENTRAL_PORTAL_USERNAME") ?: "")
+            password.set(System.getenv("CENTRAL_PORTAL_PASSWORD") ?: "")
+        }
+    }
+    
+    // Configure timeouts for publishing
+    connectTimeout.set(Duration.ofMinutes(3))
+    clientTimeout.set(Duration.ofMinutes(3))
+    
+    // Transition check settings
+    transitionCheckOptions {
+        maxRetries.set(60)
+        delayBetween.set(Duration.ofSeconds(10))
+    }
+}
+
+// Add publishing tasks for validation
+tasks.register("checkCentralPortalCredentials") {
+    group = "verification"
+    description = "Validates Central Portal publishing configuration"
+    
+    doLast {
+        val username = System.getenv("CENTRAL_PORTAL_USERNAME")
+        val password = System.getenv("CENTRAL_PORTAL_PASSWORD")
+        
+        println("=== Central Portal Configuration ===")
+        println("Username configured: ${if (!username.isNullOrEmpty()) "✓" else "✗"}")
+        println("Password configured: ${if (!password.isNullOrEmpty()) "✓" else "✗"}")
+        println("")
+        
+        if (username.isNullOrEmpty() || password.isNullOrEmpty()) {
+            println("⚠️  Missing Central Portal credentials")
+            println("Required environment variables:")
+            println("• CENTRAL_PORTAL_USERNAME")
+            println("• CENTRAL_PORTAL_PASSWORD")
+            println("")
+            println("📚 Setup guide: https://central.sonatype.org/publish/generate-portal-token/")
+        } else {
+            println("✅ Central Portal credentials configured")
+            println("Ready for automated publishing!")
+        }
+    }
 }
 
 // Add custom tasks for debugging and validation
 tasks.register("validateCredentials") {
     group = "verification"
-    description = "Validates publishing credentials and configuration"
-    
-    doLast {
-        println("=== Publishing Credentials Validation ===")
-        println("OSSRH Username set: ${if (!ossrhUsername.isNullOrEmpty()) "✓" else "✗"}")
-        println("OSSRH Password set: ${if (!ossrhPassword.isNullOrEmpty()) "✓" else "✗"}")
-        println("GPG Private Key set: ${if (!System.getenv("GPG_PRIVATE_KEY").isNullOrEmpty()) "✓" else "✗"}")
-        println("GPG Passphrase set: ${if (!System.getenv("GPG_PASSPHRASE").isNullOrEmpty()) "✓" else "✗"}")
-        
-        val stagingProfileId = project.findProperty("sonatypeStagingProfileId") as String? ?: System.getenv("SONATYPE_STAGING_PROFILE_ID")
-        println("Staging Profile ID set: ${if (!stagingProfileId.isNullOrEmpty()) "✓ ($stagingProfileId)" else "✗"}")
-        
-        if (!hasCredentials) {
-            println("\n⚠️ Missing OSSRH credentials. Publishing to Maven Central will fail.")
-            println("Set OSSRH_USERNAME and OSSRH_PASSWORD environment variables or gradle properties.")
-        } else {
-            println("\n✓ Basic credentials are configured")
-        }
-    }
+    description = "Validates publishing configuration"
+    dependsOn("checkCentralPortalCredentials")
 }
 
 tasks.register("publishLocalOnly") {
@@ -44,29 +78,3 @@ tasks.register("publishLocalOnly") {
     dependsOn(":lib:publishToMavenLocal")
 }
 
-// Nexus publishing configuration
-nexusPublishing {
-    repositories {
-        if (hasCredentials) {
-            sonatype {
-                nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
-                snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
-                username.set(ossrhUsername)
-                password.set(ossrhPassword)
-                // Package group for jp.vemi artifacts
-                packageGroup.set("jp.vemi")
-                // Set staging profile ID to avoid 401 errors during profile discovery
-                // This can be obtained from: https://s01.oss.sonatype.org/#stagingProfiles
-                stagingProfileId.set(project.findProperty("sonatypeStagingProfileId") as String? ?: System.getenv("SONATYPE_STAGING_PROFILE_ID"))
-            }
-        }
-    }
-    // Configuration for timeouts and retries
-    transitionCheckOptions {
-        maxRetries.set(60)
-        delayBetween.set(java.time.Duration.ofSeconds(10))
-    }
-    // Increase timeouts for slower connections
-    connectTimeout.set(java.time.Duration.ofMinutes(3))
-    clientTimeout.set(java.time.Duration.ofMinutes(3))
-}

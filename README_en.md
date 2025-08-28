@@ -175,23 +175,30 @@ To meet different environment requirements, two distribution formats are provide
 
 ## Installation
 
+> **✅ Maven Central Publishing Status**: This project now supports automated publishing using Maven Central Portal. Latest versions are available from Maven Central.
+
 ### Maven (Slim JAR)
 ```xml
 <dependency>
     <groupId>jp.vemi</groupId>
     <artifactId>jackson-databind-jsonc</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
 ### Gradle (Slim JAR)
 ```groovy
-implementation 'jp.vemi:jackson-databind-jsonc:1.0.0'
+implementation 'jp.vemi:jackson-databind-jsonc:1.0.5'
 ```
 
 ### Manual Installation
 1. Download the JAR from the [releases page](https://github.com/vemic/jackson-databind-jsonc/releases)
 2. Add it to your project's classpath
+
+**📋 Release Information:**
+- Automated publishing: Available via Maven Central Portal automation
+- Manual download: Immediately available from GitHub Releases
+- Details: See [PUBLISHING.md](./PUBLISHING.md)
 
 ## When to Use Which JAR
 

@@ -2,64 +2,51 @@
 # Development setup script for publishing credentials
 
 echo "🔧 Jackson Databind JSONC - Publishing Setup"
-echo "=============================================="
+echo "============================================="
 echo
 
 # Check if running in CI
 if [ "$CI" = "true" ]; then
-    echo "Running in CI environment - checking secrets..."
+    echo "Running in CI environment - checking configuration..."
     ./gradlew validateCredentials
     exit $?
 fi
 
-echo "This script helps set up publishing credentials for local development."
-echo "For production releases, these should be set as GitHub repository secrets."
-echo
+echo "⚠️  IMPORTANT: Sonatype OSSRH Migration Notice"
+echo "=============================================="
+echo "Sonatype OSSRH is being discontinued on June 30, 2025."
+echo "This project has been migrated to Maven Central Portal."
+echo ""
+echo "📦 Current Release Process:"
+echo "1. Push git tag (e.g., v1.0.0) to trigger GitHub Actions release"
+echo "2. Download JAR artifacts from GitHub Releases"
+echo "3. Upload manually to Maven Central Portal: https://central.sonatype.com/"
+echo ""
+echo "🔗 Migration Resources:"
+echo "• Central Portal: https://central.sonatype.com/"
+echo "• OSSRH Sunset: https://central.sonatype.org/pages/ossrh-eol/"
+echo "• Migration Guide: https://www.endoflineblog.com/migrate-maven-central-publishing-to-central-portal-for-a-gradle-project"
+echo ""
 
-# Function to read sensitive input
-read_secret() {
-    echo -n "$1: "
-    read -s value
-    echo
-    echo $value
-}
-
-# Function to read normal input
-read_input() {
-    echo -n "$1: "
-    read value
-    echo $value
-}
-
-echo "📋 Current credential status:"
+echo "📋 Current build configuration:"
 ./gradlew validateCredentials --quiet
 echo
 
-echo "Would you like to set up credentials for this session? (y/N)"
-read -r setup_creds
+echo "Would you like to set up GPG signing for local development? (y/N)"
+read -r setup_gpg
 
-if [[ "$setup_creds" =~ ^[Yy]$ ]]; then
+if [[ "$setup_gpg" =~ ^[Yy]$ ]]; then
     echo
-    echo "🔐 Setting up credentials (these will only last for this terminal session):"
+    echo "🔐 Setting up GPG credentials (for local signing only):"
     echo
     
-    USERNAME=$(read_input "OSSRH Username")
-    if [ -n "$USERNAME" ]; then
-        export OSSRH_USERNAME="$USERNAME"
-    fi
-    
-    PASSWORD=$(read_secret "OSSRH Password/Token")
-    if [ -n "$PASSWORD" ]; then
-        export OSSRH_PASSWORD="$PASSWORD"
-    fi
-    
-    STAGING_ID=$(read_input "Staging Profile ID (optional)")
-    if [ -n "$STAGING_ID" ]; then
-        export SONATYPE_STAGING_PROFILE_ID="$STAGING_ID"
-    fi
-    
-    echo
-    echo "For GPG signing (optional for local testing):"
+    # Function to read sensitive input
+    read_secret() {
+        echo -n "$1: "
+        read -s value
+        echo
+        echo $value
+    }
     
     GPG_KEY=$(read_secret "GPG Private Key (optional)")
     if [ -n "$GPG_KEY" ]; then
@@ -72,25 +59,27 @@ if [[ "$setup_creds" =~ ^[Yy]$ ]]; then
     fi
     
     echo
-    echo "✅ Credentials set for this session!"
+    echo "✅ GPG credentials set for this session!"
     echo
-    echo "📋 Updated credential status:"
+    echo "📋 Updated configuration:"
     ./gradlew validateCredentials --quiet
     echo
     
     echo "You can now run:"
     echo "  ./gradlew publishLocalOnly      # Test local publishing"
-    echo "  ./gradlew publishToSonatype     # Publish to staging (requires valid credentials)"
+    echo "  ./gradlew build fatJar          # Build release artifacts"
     echo
 else
     echo
-    echo "📚 To set up credentials later, you can:"
-    echo "  1. Set environment variables manually:"
-    echo "     export OSSRH_USERNAME=your_username"
-    echo "     export OSSRH_PASSWORD=your_password"
-    echo "  2. Use gradle.properties file (not recommended for sensitive data)"
-    echo "  3. Set up GitHub repository secrets for automated releases"
+    echo "📚 For Maven Central publishing:"
+    echo "  1. Push a git tag (e.g., v1.0.0) to trigger release workflow"
+    echo "  2. Download artifacts from GitHub release"
+    echo "  3. Upload manually to Central Portal: https://central.sonatype.com/"
+    echo
+    echo "📚 For local development:"
+    echo "  ./gradlew build                 # Build and test"
+    echo "  ./gradlew publishLocalOnly      # Publish to local Maven cache"
     echo
 fi
 
-echo "📖 For more information, see PUBLISHING.md"
+echo "📖 For detailed information, see PUBLISHING.md"

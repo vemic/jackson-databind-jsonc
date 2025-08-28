@@ -1,43 +1,35 @@
 @echo off
-echo "=== Testing Release Workflow (With Mock Credentials) ==="
+echo "=== Testing Release Workflow (Post-OSSRH Migration) ==="
 echo.
 
-:: Set mock credentials for testing
-set OSSRH_USERNAME=test_user
-set OSSRH_PASSWORD=test_password
-set GPG_PRIVATE_KEY=fake_key
-set GPG_PASSPHRASE=fake_passphrase
+echo "⚠️  OSSRH Migration Notice:"
+echo "Sonatype OSSRH is discontinued as of June 30, 2025"
+echo "This project now uses Maven Central Portal for publishing"
+echo.
 
-echo "Step 1: Validate credentials with mock data"
+echo "Step 1: Validate build configuration"
 call .\gradlew.bat validateCredentials
 if %ERRORLEVEL% neq 0 (
-    echo "❌ Credential validation failed"
+    echo "❌ Configuration validation failed"
     exit /b 1
 )
 
 echo.
-echo "Step 2: Test Sonatype task availability"
-call .\gradlew.bat tasks --group=publishing
+echo "Step 2: Test artifact building"
+call .\gradlew.bat clean build fatJar
 if %ERRORLEVEL% neq 0 (
-    echo "❌ Publishing tasks check failed"
+    echo "❌ Artifact building failed"
     exit /b 1
 )
 
 echo.
-echo "Step 3: Dry run - check publishToSonatype exists"
-call .\gradlew.bat help --task publishToSonatype
+echo "Step 3: Test local publishing"
+call .\gradlew.bat publishLocalOnly
 if %ERRORLEVEL% neq 0 (
-    echo "⚠️ publishToSonatype task not available (expected without real Sonatype config)"
-) else (
-    echo "✅ publishToSonatype task is available"
+    echo "❌ Local publishing failed"
+    exit /b 1
 )
 
 echo.
-echo "✅ Release workflow test (mock credentials) - PASSED"
-echo "This shows credential detection works correctly"
-
-:: Clear mock credentials
-set OSSRH_USERNAME=
-set OSSRH_PASSWORD=
-set GPG_PRIVATE_KEY=
-set GPG_PASSPHRASE=
+echo "✅ Release workflow test - PASSED"
+echo "Migration complete - GitHub releases will provide artifacts for Central Portal upload"

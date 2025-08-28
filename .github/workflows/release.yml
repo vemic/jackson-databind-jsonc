@@ -11,6 +11,11 @@ name: Release
         description: 'Version to release (e.g., v1.0.0)'
         required: false
         type: string
+      skip_maven_central:
+        description: 'Skip Maven Central publishing (GitHub release only)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -19,8 +24,11 @@ permissions:
   deployments: write
 
 jobs:
-  build-and-release:
+  build:
     runs-on: ubuntu-latest
+    name: Build Release Artifacts
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout repository
@@ -29,82 +37,148 @@ jobs:
       - name: Set execute permission for gradlew
         run: chmod +x ./gradlew
 
-      - name: Set up JDK 21 (for building)
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Build JARs
+      - name: Determine version
+        id: version
         run: |
-          chmod +x ./gradlew
-          ./gradlew clean build fatJar
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
+
+      - name: Build and sign artifacts
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          ./gradlew clean build fatJar publishToMavenLocal
           
       - name: List built artifacts
         run: |
           echo "Built artifacts:"
           find lib/build/libs -name "*.jar" -ls
           echo ""
-          echo "Release artifacts:"
-          echo "- Slim JAR (recommended): $(find lib/build/libs -name "jackson-databind-jsonc-*.jar" | grep -v sources | grep -v javadoc | grep -v all | grep -v shadow)"
-          echo "- Fat JAR (all-in-one):   $(find lib/build/libs -name "jackson-databind-jsonc-*-all.jar")"
-          echo "- Sources JAR:            $(find lib/build/libs -name "*sources.jar")"
-          echo "- Javadoc JAR:            $(find lib/build/libs -name "*javadoc.jar")"
+          echo "Maven repository artifacts:"
+          find ~/.m2/repository/jp/vemi -name "*.jar" -ls 2>/dev/null || echo "No local Maven artifacts found"
           
-      - name: Create Release
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            lib/build/libs/*.jar
+            ~/.m2/repository/jp/vemi/**/*
+          retention-days: 5
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Create GitHub Release
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: ./artifacts
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.build.outputs.version }}
           files: |
-            lib/build/libs/jackson-databind-jsonc-*.jar
+            artifacts/lib/build/libs/*.jar
           generate_release_notes: true
+          body: |
+            ## 📦 Artifacts
+            
+            - **Slim JAR** (recommended): `jackson-databind-jsonc-${{ needs.build.outputs.version }}.jar`
+            - **Fat JAR** (all-in-one): `jackson-databind-jsonc-${{ needs.build.outputs.version }}-all.jar`
+            - **Sources JAR**: `jackson-databind-jsonc-${{ needs.build.outputs.version }}-sources.jar`
+            - **Javadoc JAR**: `jackson-databind-jsonc-${{ needs.build.outputs.version }}-javadoc.jar`
+            
+            ## 🚀 Maven Central
+            
+            This release is automatically published to Maven Central Portal.
+            
+            **Gradle:**
+            ```kotlin
+            implementation("jp.vemi:jackson-databind-jsonc:${{ needs.build.outputs.version }}")
+            ```
+            
+            **Maven:**
+            ```xml
+            <dependency>
+                <groupId>jp.vemi</groupId>
+                <artifactId>jackson-databind-jsonc</artifactId>
+                <version>${{ needs.build.outputs.version }}</version>
+            </dependency>
+            ```
 
-      - name: Verify Sonatype Configuration
+  maven-central-publish:
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    name: Publish to Maven Central Portal
+    if: ${{ !github.event.inputs.skip_maven_central }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: ./artifacts
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Publish to Maven Central Portal
         env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          CENTRAL_PORTAL_USERNAME: ${{ secrets.CENTRAL_PORTAL_USERNAME }}
+          CENTRAL_PORTAL_PASSWORD: ${{ secrets.CENTRAL_PORTAL_PASSWORD }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          echo "Verifying Sonatype configuration..."
-          ./gradlew validateCredentials
-          
-      - name: Publish to Maven Central (if credentials available)
-        env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          if [ -z "$OSSRH_USERNAME" ] || [ -z "$OSSRH_PASSWORD" ]; then
-            echo "⚠️ OSSRH credentials not set. Skipping Maven Central publishing."
-            echo "Publishing to local repository only..."
-            ./gradlew publishLocalOnly
-            echo "✓ Local publishing completed. To publish to Maven Central:"
-            echo "  1. Set OSSRH_USERNAME and OSSRH_PASSWORD secrets"
-            echo "  2. Set GPG_PRIVATE_KEY and GPG_PASSPHRASE secrets"
-            echo "  3. Optionally set SONATYPE_STAGING_PROFILE_ID secret"
-            exit 0
-          fi
-          
-          echo "📦 Publishing to Maven Central..."
-          echo "Step 1: Build and publish to Sonatype staging..."
-          if ! ./gradlew publishToSonatype --info --stacktrace --no-daemon; then
-            echo "❌ Failed to publish to Sonatype staging"
-            echo "This might be due to:"
-            echo "  - Invalid OSSRH credentials" 
-            echo "  - Missing staging profile ID"
-            echo "  - Network issues"
+          if [ -z "$CENTRAL_PORTAL_USERNAME" ] || [ -z "$CENTRAL_PORTAL_PASSWORD" ]; then
+            echo "🚨 Missing Central Portal credentials"
+            echo "Please set CENTRAL_PORTAL_USERNAME and CENTRAL_PORTAL_PASSWORD secrets"
+            echo "📚 Setup guide: https://central.sonatype.org/publish/generate-portal-token/"
             echo ""
-            echo "💡 Try setting SONATYPE_STAGING_PROFILE_ID secret to avoid profile discovery"
+            echo "📋 Manual upload instructions:"
+            echo "1. Visit: https://central.sonatype.com/"
+            echo "2. Sign in with your Sonatype account"
+            echo "3. Upload artifacts from the GitHub release"
+            echo "4. Follow the Central Portal publishing workflow"
             exit 1
           fi
           
-          echo "Step 2: Close and release staging repository..."
-          if ! ./gradlew closeAndReleaseSonatypeStagingRepository --info --stacktrace --no-daemon; then
-            echo "❌ Failed to close and release staging repository"
-            echo "The artifacts may have been published to staging but not released"
-            echo "Check https://s01.oss.sonatype.org/ for manual release"
-            exit 1
-          fi
+          echo "📦 Publishing to Maven Central Portal..."
           
-          echo "✅ Successfully published to Maven Central!"
+          # Publish to Central Portal using nexus-publish-plugin
+          ./gradlew publishToSonatype closeAndReleaseSonatypeStagingRepository
+          
+          echo "✅ Published to Central Portal staging repository"
+          echo "🔄 Closing and releasing staging repository..."
+
+      - name: Publishing Success
+        if: success()
+        run: |
+          echo "✅ Successfully published to Maven Central Portal!"
+          echo "🔍 Check deployment status: https://central.sonatype.com/"
+          echo "⏱️  It may take a few minutes to appear on Maven Central"

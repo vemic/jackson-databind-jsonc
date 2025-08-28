@@ -166,23 +166,30 @@ MyConfig config = mapper.readValue(json5, MyConfig.class);
 
 ## インストール
 
+> **✅ Maven Central 公開状況**: このプロジェクトは Maven Central Portal を使用した自動公開に対応しています。最新バージョンは Maven Central から取得可能です。
+
 ### Maven（Slim JAR）
 ```xml
 <dependency>
     <groupId>jp.vemi</groupId>
     <artifactId>jackson-databind-jsonc</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
 ### Gradle（Slim JAR）
 ```groovy
-implementation 'jp.vemi:jackson-databind-jsonc:1.0.0'
+implementation 'jp.vemi:jackson-databind-jsonc:1.0.5'
 ```
 
 ### 手動インストール
 1. [Releases ページ](https://github.com/vemic/jackson-databind-jsonc/releases) から JAR をダウンロード
 2. プロジェクトのクラスパスに追加
+
+**📋 リリース情報:**
+- 自動公開: Maven Central Portal 経由で自動化済み
+- 手動取得: GitHub Releases から即座にダウンロード可能  
+- 詳細情報: [PUBLISHING.md](./PUBLISHING.md) を参照
 
 ## どちらの JAR を使うべきか
 
